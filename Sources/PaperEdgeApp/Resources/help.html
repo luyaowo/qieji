@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; base-uri 'none'">
+  <title>且记 · 使用说明</title>
+  <style>
+    @font-face {font-family:QieJiPaper; src:url('MacResources/QieJiPaper-Regular.ttf') format('truetype'); font-display:swap; }
+    * {box-sizing:border-box; }
+    html {color-scheme:light; scroll-padding-top:24px; }
+    body {margin:0; background:#f5f4ed; color:#181817; font:16px/1.85 QieJiPaper, "Songti SC", serif; }
+    main {max-width:760px; margin:auto; padding:40px 24px 64px; }
+    h1 {margin:0; font-size:32px; font-weight:500; line-height:1.4; }
+    h2 {margin:36px 0 12px; font-size:22px; font-weight:500; line-height:1.5; }
+    p {margin:12px 0; }
+    header {padding-bottom:24px; border-bottom:1px solid #d5dacb; }
+    .intro, footer {color:#4f4d47; }
+    nav {display:flex; flex-wrap:wrap; gap:8px 20px; margin-top:20px; }
+    a {color:#1b365d; text-underline-offset:4px; }
+    a:focus-visible {outline:2px solid #557492; outline-offset:4px; }
+    li {margin:8px 0; }
+    ul, ol {padding-left:24px; }
+    strong {font-weight:700; }
+    kbd {font:inherit; white-space:nowrap; }
+    footer {margin-top:40px; padding-top:20px; border-top:1px solid #d5dacb; font-size:14px; }
+    @media (max-width:400px) {main {padding:28px 20px 40px; }h1 {font-size:28px; }}
+    @media print {body {background:white; }main {max-width:none; padding:0; }nav {display:none; }h2 {break-after:avoid; }}
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>且记 · 使用说明</h1>
+    <p class="intro">一张放在 Mac 桌边的任务纸。随手记下，持续看见，需要时提醒，也能打印带走。</p>
+    <p class="intro">适用于 Apple 芯片 Mac，macOS 14 或更新版本。任务保存在本机，Mac 与 iPhone 目前不互通。</p>
+    <nav aria-label="说明目录"><a href="#start">开始记录</a><a href="#reminders">设置提醒</a><a href="#recovery">恢复任务</a><a href="#data">保存与迁移</a><a href="#install">安装与升级</a></nav>
+  </header>
+  <section id="start">
+    <h2>开始记录</h2>
+    <ol>
+      <li>在底部输入一件要做的事，用“新增到：”选择今天、最近或长远，再按回车或点击加号添加。</li>
+      <li>单击任务文字可以编辑，按回车保存；按 Esc 取消这次文字编辑。鼠标点击其他位置也会提交文字编辑。</li>
+      <li>点任务左侧的方框标记完成，再点一次可以恢复未完成。</li>
+    </ol>
+    <p><strong>分组由你安排，不随日期自动移动。</strong>到了第二天，任务不会自动换组或消失；“最近”不是系统计算的未来七天。可以拖动任务调整顺序、跨组移动。</p>
+    <p>首次打开会提供 5 条示例任务。可以保留体验，也可以清除未修改的示例；你新增的任务和修改过的示例会保留。</p>
+    <p>“侧边”适合随手查看，“完整窗口”适合集中安排，两种形态共用同一份清单。关闭完整窗口会回到侧边入口；完全退出应用请使用“且记 → 退出且记”。</p>
+  </section>
+  <section id="reminders">
+    <h2>设置提醒</h2>
+    <p>鼠标移到未完成任务上，或用键盘把焦点移到任务，点击右侧铃铛打开提醒设置。已经设置提醒的任务，也可以直接点击文字下方的提醒时间。</p>
+    <ol>
+      <li>选择快捷时间，或选择提醒频率并填写时间。每周提醒还需选择星期。</li>
+      <li>查看“待保存”的下次提醒时间，再点击<strong>“设置提醒”</strong>生效。快捷时间也需要这一步确认。</li>
+      <li>“取消修改”、Esc 或关闭尚未提交的提醒表单，会保留原有提醒。“取消提醒”则会撤掉已有提醒。</li>
+    </ol>
+    <p><strong>重复提醒持续提醒同一条待办，完成任务后停止。</strong>每天、工作日和每周都从最近一次匹配的时间开始，不会每天自动创建新任务。设置提醒不会移动任务的分组。</p>
+    <p>系统通知可以打开对应任务、标记“完成”，或选择“15 分钟后再提醒”。对于重复提醒，延后只影响本次，原有重复时刻与星期保留。完成、删除或取消提醒会撤回对应待发通知。</p>
+    <p><strong>已知问题：</strong>系统通知中选择“15 分钟后再提醒”后，系统记录的动作与实际不符，差异尚未定位，这段路径不保证可用。需要延后时，请回到应用内修改提醒时间，并核对保存后的显示。</p>
+    <p>错过的一次性提醒会在清单顶部汇总为“已错过”，可在那里完成或延后。重复提醒不进入错过汇总。提醒数量较多时，应用按任务整组排入最近 60 条通知，打开应用或修改任务时会重新排期。</p>
+    <h2>没有看到通知时</h2>
+    <ul>
+      <li>先打开 Mac 的通知中心，查找“且记提醒”。通知进入通知中心与屏幕弹出横幅是两件事。</li>
+      <li>在“系统设置 → 通知 → 且记”中检查通知权限和展示方式。应用内出现“通知未开启”图标时，可点击前往系统设置。</li>
+      <li>专注模式（比如工作模式）可能延迟通知或影响横幅展示。不同应用可以有不同的允许规则，请检查当前模式。</li>
+      <li>实际送达和展示受系统状态影响。“15 分钟后再提醒”的已知异常见上方说明；需要延后时，回到应用内修改提醒时间。</li>
+    </ul>
+  </section>
+  <section id="recovery">
+    <h2>恢复任务</h2>
+    <p>任务右侧的“删”会把它移入回收站。工具栏扫帚“清理已完成”会收纳所有分组中的已完成任务，同样可以从回收站恢复；操作后也有短暂的“撤销”入口。</p>
+    <p>点击工具栏垃圾桶打开回收站，可逐条恢复。“永久删除”和“清空已删除”会要求确认，确认后无法通过回收站恢复。点击“返回任务”回到清单。</p>
+  </section>
+  <section id="data">
+    <h2>保存、备份与迁移</h2>
+    <p>任务和回收记录保存在本机。应用退出时会提交当前文字编辑并保存；如果写入失败，退出会取消并提示。未确认的提醒表单不会随退出自动应用。</p>
+    <p>“文件”菜单提供“导出任务…”“导入任务…”和“在 Finder 中显示备份”。导出包含任务、文字格式、提醒规则及回收记录，不含尚未添加的输入草稿。</p>
+    <p>换电脑时，先在原电脑导出 JSON 文件，再到新电脑导入。<strong>导入是合并，不是整份覆盖：</strong>同 ID 保留当前版本，新记录追加。导入前会备份当前工作区，备份失败会取消导入。单个导入文件上限为 20 MB、20,000 条任务及回收记录。</p>
+    <p>“在 Finder 中显示备份”打开导入前备份的目录；它不是云同步，也不代表已经有异地备份。你可以把导出的 JSON 另存到自己选择的位置。</p>
+    <h2>打印与键盘</h2>
+    <p>工具栏打印按钮或 <kbd>⌘P</kbd> 可打印未完成任务，也可在系统打印窗口保存 PDF。打印保留标题、日期、分组、任务正文、文字格式和勾选框，隐藏操作按钮、输入框、回收站、已完成任务，以及提醒时间、重复频率、下次提醒和通知状态图标。应用内提醒设置不受影响。</p>
+    <p>应用内可用 <kbd>⌘1</kbd> 切换完整窗口、<kbd>⌘2</kbd> 切换侧边、<kbd>⌘K</kbd> 聚焦输入。任务文字获得焦点后，用 <kbd>⌥↑</kbd> / <kbd>⌥↓</kbd> 调整顺序，到组边界可进入相邻分组。选中文字后可加粗或设置底色，格式工具支持 Tab 和回车操作。</p>
+  </section>
+  <section id="install">
+    <h2>安装与升级</h2>
+    <p>ZIP 解压后，将且记应用放入“应用程序”。升级前先导出任务并保留旧应用，再正常退出旧版，替换应用后重新打开，核对“关于且记”的版本和任务内容。</p>
+    <p>本版应用标识改为 <code>com.luyaowo.qieji</code>，任务和回收记录继续使用原数据目录，通知权限需要重新授权；窗口形态、展开状态和位置等偏好可能恢复默认。</p>
+    <p>从旧标识版本升级时，替换应用前先关闭旧版“开机启动”并确认已完全退出。升级后检查新版本的通知权限和“开机启动”，只运行一个副本，避免同时写入同一任务目录。旧版已排通知是否残留或重复尚未验证，升级后也需核对。</p>
+    <p>只复制应用不会把任务一起带走；任务迁移请使用导出和导入。回退应用版本时，也应先保留当前任务。导入旧备份仍按合并规则处理，不会覆盖同 ID 的当前任务，也不会把整份清单自动回到过去的状态。</p>
+    <p>本作品当前使用本地测试签名，尚未完成 Developer ID 签名和 Apple 公证。将来正式公开分发时，还需对最终下载包单独验证。</p>
+  </section>
+  <footer>这是随应用提供的本地说明，无需联网。产品规则以当前应用实现和已说明的边界为准。</footer>
+</main>
+</body>
+</html>

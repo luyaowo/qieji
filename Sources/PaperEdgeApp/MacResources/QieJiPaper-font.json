@@ -1,0 +1,22 @@
+{
+  "family": "QieJi Paper",
+  "postscript_name": "QieJiPaper-Regular",
+  "scope": "Mac screen only; original face retained for print and non-native pages",
+  "source": "ZhuqueFangsong-Regular.ttf",
+  "source_sha256": "558c62730844fe54ba220146ed62f859d4e2880188d92d985f8921c6e3743bc4",
+  "output": "QieJiPaper-Regular.ttf",
+  "output_sha256": "e9e0a3ef64377d99416549c48d9fde1135b1c86e997a286cc27412e916d6730f",
+  "units_per_em": 1000,
+  "hhea": {
+    "ascent": 850,
+    "descent": -150,
+    "lineGap": 200
+  },
+  "changed_tables": [
+    "hhea",
+    "name",
+    "head checksum/timestamp"
+  ],
+  "license": "ZhuqueFangsong-OFL.txt",
+  "provenance": "C-group metric alignment; original glyphs and OpenType features retained"
+}

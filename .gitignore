@@ -1,0 +1,19 @@
+.DS_Store
+.build/
+.swiftpm/
+dist/
+Backups/
+__pycache__/
+*.pyc
+*.app/
+*.xcuserstate
+xcuserdata/
+.env
+.env.*
+!.env.example
+
+# Signing credentials stay outside the repository.
+*.p12
+*.p8
+*.key
+*.mobileprovision
