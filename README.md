@@ -10,7 +10,7 @@
     <a href="#许可">许可</a>
   </p>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2f6fde.svg?style=flat-square" alt="MIT 许可"></a>
-  <img src="https://img.shields.io/badge/version-0.2.4%20%C2%B7%2026-555.svg?style=flat-square" alt="0.2.4 构建 26">
+  <img src="https://img.shields.io/badge/version-0.2.5%20%C2%B7%2027-555.svg?style=flat-square" alt="0.2.5 构建 27">
   <img src="https://img.shields.io/badge/macOS-14%2B%20%C2%B7%20Apple%20Silicon-555.svg?style=flat-square" alt="macOS 14 及以上，Apple 芯片">
 </div>
 
@@ -48,16 +48,16 @@
 
 适用于 **Apple 芯片 Mac，macOS 14 及以上**。
 
-**[下载 macOS 版](https://github.com/luyaowo/qieji/releases/tag/v0.2.4)** · DMG
+**[下载 macOS 版](https://github.com/luyaowo/qieji/releases/tag/v0.2.5)** · DMG
 
-### Homebrew（公开下载后可用）
+### Homebrew
 
 ```bash
 brew tap luyaowo/qieji https://github.com/luyaowo/qieji.git
 brew install --cask luyaowo/qieji/qieji
 ```
 
-Homebrew 配置已提供；仓库目前为私有，以下命令需等仓库与安装包开放公开下载后使用。
+Homebrew 配置随仓库提供，安装包来自同一 GitHub Release。
 
 ## 快速上手
 

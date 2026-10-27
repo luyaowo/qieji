@@ -734,6 +734,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessag
             interfaceLoadFailures = 0
             // Replay native window state in case a menu command arrived before the page mounted.
             webView.evaluateJavaScript("window.paperEdgeSetMode?.('\(displayMode.rawValue)'); window.paperEdgeSetOpen?.(\(isPanelOpen ? "true" : "false"));")
+            if displayMode == .side { revealPanelContent(open: isPanelOpen) }
             openPendingReminder()
             flushPendingTaskCommands()
             if interfaceRecoveryPending {
@@ -846,6 +847,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessag
         webView.frame = content.bounds
         webView.autoresizingMask = [.width, .height]
         webView.layer?.cornerRadius = 0
+        setWebContentOpacity(1)
         content.addSubview(webView)
         panel.orderOut(nil)
         window.makeKeyAndOrderFront(nil)
@@ -885,6 +887,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessag
     private func animatePaperSurface(open: Bool) {
         motionGeneration += 1
         let generation = motionGeneration
+        // Hide the composited WebKit content before changing its viewport.
+        // CSS alone cannot hide the previous rendered frame during a resize.
+        setWebContentOpacity(0)
         let expandedFromCollapsedWindow = prepareOpenCanvas()
 
         let targetFrame = surfaceFrame(open: open)
@@ -1002,10 +1007,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessag
         let openFrame = frameForPanel(open: true)
         let wasCollapsed = panel.frame.width < openFrame.width - 1
         if wasCollapsed {
-            panel.setFrame(openFrame, display: false)
-            containerView.frame = NSRect(origin: .zero, size: openFrame.size)
             CATransaction.begin()
             CATransaction.setDisableActions(true)
+            panel.setFrame(openFrame, display: false)
+            containerView.frame = NSRect(origin: .zero, size: openFrame.size)
             paperLayer.frame = NSRect(origin: .zero, size: openFrame.size)
             paperLayer.path = paperPath(
                 in: surfaceFrame(open: false),
@@ -1023,6 +1028,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessag
 
     private func finishOpenState() {
         let openFrame = frameForPanel(open: true)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         paperLayer.frame = NSRect(origin: .zero, size: openFrame.size)
         paperLayer.path = paperPath(
             in: surfaceFrame(open: true),
@@ -1032,11 +1039,15 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessag
         paperLayer.shadowPath = paperLayer.path
         webView.layer?.cornerRadius = PanelChrome.openCornerRadius
         webView.frame = surfaceFrame(open: true)
+        CATransaction.commit()
+        revealPanelContent(open: true)
     }
 
     private func finishClosedState() {
         let closedFrame = frameForPanel(open: false)
         let closedSurface = surfaceFrame(in: closedFrame)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         panel.setFrame(closedFrame, display: false)
         containerView.frame = NSRect(origin: .zero, size: closedFrame.size)
         paperLayer.frame = NSRect(origin: .zero, size: closedFrame.size)
@@ -1048,11 +1059,47 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessag
         paperLayer.shadowPath = paperLayer.path
         webView.layer?.cornerRadius = PanelChrome.closedCornerRadius
         webView.frame = closedSurface
+        CATransaction.commit()
         panel.displayIfNeeded()
+        revealPanelContent(open: false)
+    }
+
+    private func setWebContentOpacity(_ opacity: Float) {
+        webView.layer?.removeAnimation(forKey: "paperEdge.contentOpacity")
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        webView.layer?.opacity = opacity
+        CATransaction.commit()
+    }
+
+    private func revealPanelContent(open: Bool) {
+        guard paperLayer.animation(forKey: "paperEdge.path") == nil else { return }
+        let generation = motionGeneration
+        // Both the label and the task list must use the final viewport before
+        // native compositing makes either visible. Ignore interrupted motions.
+        webView.callAsyncJavaScript(
+            "await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); return true;",
+            arguments: [:], in: nil, in: .page
+        ) { [weak self] result in
+            guard case .success = result, let self, generation == self.motionGeneration,
+                  self.displayMode == .side, self.isPanelOpen == open,
+                  self.webView.frame == self.surfaceFrame(in: self.frameForPanel(open: open)),
+                  self.paperLayer.animation(forKey: "paperEdge.path") == nil else { return }
+            let fromOpacity = self.webView.layer?.presentation()?.opacity ?? self.webView.layer?.opacity ?? 0
+            self.setWebContentOpacity(1)
+            if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                let fade = CABasicAnimation(keyPath: "opacity")
+                fade.fromValue = fromOpacity
+                fade.toValue = Float(1)
+                fade.duration = 0.12
+                self.webView.layer?.add(fade, forKey: "paperEdge.contentOpacity")
+            }
+        }
     }
 
     private func applyPanelStateImmediately(open: Bool) {
         motionGeneration += 1
+        setWebContentOpacity(0)
         paperLayer.removeAllAnimations()
         if open {
             prepareOpenCanvas()
@@ -1129,13 +1176,17 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessag
         let minimumY = visible.minY + PanelLayout.screenInset
         let maximumY = visible.maxY - PanelLayout.screenInset - surfaceHeight
 
-        return NSRect(
+        let requested = NSRect(
             x: visible.maxX - width,
             y: min(max(preferredCenterY - surfaceHeight / 2, minimumY), maximumY)
                 - PanelChrome.shadowInset,
             width: width,
             height: height
         )
+        // AppKit may move the transparent shadow margin below the menu bar.
+        // Paths and canvas handoffs must use the same constrained screen frame
+        // that setFrame will actually apply, otherwise the paper jumps at rest.
+        return panel?.constrainFrameRect(requested, to: screen) ?? requested
     }
 
     private func printTasks() {
