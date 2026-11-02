@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run the actual native window code with isolated data and transition probes."""
 import json
+import os
 from pathlib import Path
 import plistlib
 import shutil
@@ -22,7 +23,7 @@ shutil.copytree(root / "Sources/PaperEdgeApp/MacResources", resources / "MacReso
     "CFBundlePackageType": "APPL",
 }))
 
-source = (root / "Sources/PaperEdgeApp/main.swift").read_text()
+source = Path(os.environ.get("QIEJI_NATIVE_SOURCE", root / "Sources/PaperEdgeApp/main.swift")).read_text()
 # Test substitutions isolate persistence/services; window methods remain production code.
 source = source.replace("?? Bundle.module", "?? Bundle.main")
 source = source.replace("configuration.websiteDataStore = .default()", "configuration.websiteDataStore = .nonPersistent()")
@@ -35,6 +36,7 @@ private let probeOutput = URL(fileURLWithPath: PROBE_OUTPUT)
 private let probeDefaults = UserDefaults(suiteName: "local.qieji.transition." + UUID().uuidString)!
 private var probeEvents: [[String: Any]] = []
 private var probeResults: [[String: Any]] = []
+private var probeCheckingRecovery = false
 private let probeStart = ProcessInfo.processInfo.systemUptime
 '''.replace('PROBE_OUTPUT', json.dumps(str(output))))
 source = source.replace('private func setPanel(open: Bool, animated: Bool) {',
@@ -47,6 +49,8 @@ source = source.replace('        panel.displayIfNeeded()\n        return wasColl
                         '        panel.displayIfNeeded()\n        traceWindow("canvasPrepared", target: isPanelOpen)\n        return wasCollapsed')
 source = source.replace('private func finishClosedState() {',
                         'private func finishClosedState() {\n        traceWindow("finishClosed", target: false)')
+source = source.replace('private func setWebContentOpacity(_ opacity: Float) {',
+                        'private func setWebContentOpacity(_ opacity: Float) {\n        probeEvents.append(["event": "contentOpacity", "value": opacity])')
 startup_end = '        if !loginLaunch { NSApp.activate(ignoringOtherApps: true) }'
 assert startup_end in source
 source = source.replace(startup_end,
@@ -58,7 +62,7 @@ private extension AppDelegate {
         probeEvents.append(["event": event, "target": target, "openBefore": isPanelOpen,
             "width": panel?.frame.width ?? 0, "height": panel?.frame.height ?? 0,
             "time": ProcessInfo.processInfo.systemUptime - probeStart])
-        if event == "canvasPrepared" && target {
+        if event == "canvasPrepared" && target && !probeCheckingRecovery {
             probeResults.append(["case": "opening-viewport-hidden",
                 "valid": (webView.layer?.opacity ?? 1) == 0])
             // The small path must stay at its previous screen position when
@@ -256,11 +260,57 @@ private extension AppDelegate {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.15) { self.sampleTab("immediate-closed", expected: "aligned") }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+            self.checkPositionRecovery(0)
+        }
+    }
+    func checkPositionRecovery(_ index: Int) {
+        probeCheckingRecovery = true
+        let names = ["screen-noop-open", "screen-noop-closed", "position-open", "position-closed", "resize-open", "wake-noop", "recovery-during-open"]
+        guard index < names.count else {
             let valid = probeResults.allSatisfy { $0["valid"] as? Bool == true }
             let data = try! JSONSerialization.data(withJSONObject: probeResults, options: [.prettyPrinted, .sortedKeys])
             try! data.write(to: probeOutput.appendingPathComponent("results.json"))
             print(String(data: data, encoding: .utf8)!)
             exit(valid ? 0 : 1)
+        }
+        let open = index != 1 && index != 3 && index != 6
+        setDisplayMode(.side, open: open)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            probeEvents = []
+            let beforeGeneration = self.motionGeneration
+            if index == 2 || index == 3 {
+                self.panel.setFrameOrigin(NSPoint(x: self.panel.frame.minX - 120, y: self.panel.frame.minY - 50))
+                self.restorePanelPosition()
+            } else if index == 4 {
+                var frame = self.panel.frame
+                frame.size.width -= 80
+                frame.size.height -= 80
+                self.panel.setFrame(frame, display: true)
+                self.restorePanelPosition()
+            } else if index == 5 {
+                NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.didWakeNotification, object: nil)
+            } else if index == 6 {
+                self.probeToggle(open: true)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) { self.restorePanelPosition() }
+            } else {
+                NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                let actual = self.panel.frame
+                let expected = self.frameForPanel(open: self.isPanelOpen)
+                let aligned = abs(actual.minX - expected.minX) < 1 && abs(actual.minY - expected.minY) < 1
+                    && abs(actual.width - expected.width) < 1 && abs(actual.height - expected.height) < 1
+                let hides = probeEvents.filter { $0["event"] as? String == "contentOpacity" && ($0["value"] as? Float) == 0 }.count
+                // Ordinary recovery never blanks a visible list. A real opening hides it once.
+                let expectedHides = index == 6 ? 1 : 0
+                let generationValid = index != 6 || self.motionGeneration == beforeGeneration + 1
+                let visible = (self.webView.layer?.opacity ?? 0) > 0.99
+                probeResults.append(["case": names[index], "aligned": aligned, "hides": hides,
+                    "visible": visible, "generationValid": generationValid,
+                    "actualFrame": NSStringFromRect(actual), "expectedFrame": NSStringFromRect(expected),
+                    "valid": aligned && hides == expectedHides && visible && generationValid])
+                self.checkPositionRecovery(index + 1)
+            }
         }
     }
 }

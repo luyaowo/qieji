@@ -1214,8 +1214,48 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessag
             }
             return
         }
-        applyPanelStateImmediately(open: isPanelOpen)
-        panel.orderFrontRegardless()
+        defer { panel.orderFrontRegardless() }
+        let targetFrame = frameForPanel(open: isPanelOpen)
+        let targetSurface = surfaceFrame(in: targetFrame)
+
+        // During a transition WebKit uses the expanded canvas. Moving that
+        // canvas does not require cancelling the animation or hiding content.
+        if paperLayer.animation(forKey: "paperEdge.path") != nil {
+            let canvas = frameForPanel(open: true)
+            if webView.frame == surfaceFrame(in: canvas) {
+                panel.setFrameOrigin(canvas.origin)
+                return
+            }
+        }
+
+        let needsLayout = containerView.frame.size != targetFrame.size || webView.frame != targetSurface
+        if !needsLayout {
+            if panel.frame != targetFrame { panel.setFrame(targetFrame, display: false) }
+            return
+        }
+
+        // Screen geometry can resize an already-expanded panel as well as a
+        // collapsed one. Update the outer window and layout together, without
+        // replaying the open/close content fade.
+        motionGeneration += 1
+        paperLayer.removeAllAnimations()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        panel.setFrame(targetFrame, display: false)
+        containerView.frame = NSRect(origin: .zero, size: targetFrame.size)
+        paperLayer.frame = containerView.bounds
+        paperLayer.path = paperPath(
+            in: targetSurface,
+            radius: isPanelOpen ? PanelChrome.openCornerRadius : PanelChrome.closedCornerRadius,
+            trailingRadius: isPanelOpen ? PanelChrome.openCornerRadius : 0
+        )
+        paperLayer.shadowPath = paperLayer.path
+        webView.layer?.cornerRadius = isPanelOpen ? PanelChrome.openCornerRadius : PanelChrome.closedCornerRadius
+        webView.frame = targetSurface
+        CATransaction.commit()
+        panel.displayIfNeeded()
+        // A genuine resize may interrupt a transition that already hid WebKit.
+        if (webView.layer?.opacity ?? 1) < 1 { revealPanelContent(open: isPanelOpen) }
     }
 
     @objc private func togglePanel() {

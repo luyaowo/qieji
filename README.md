@@ -10,7 +10,7 @@
     <a href="#许可">许可</a>
   </p>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2f6fde.svg?style=flat-square" alt="MIT 许可"></a>
-  <img src="https://img.shields.io/badge/version-0.2.5%20%C2%B7%2027-555.svg?style=flat-square" alt="0.2.5 构建 27">
+  <img src="https://img.shields.io/badge/source-0.2.6%20%C2%B7%2028-555.svg?style=flat-square" alt="源码 0.2.6 构建 28">
   <img src="https://img.shields.io/badge/macOS-14%2B%20%C2%B7%20Apple%20Silicon-555.svg?style=flat-square" alt="macOS 14 及以上，Apple 芯片">
 </div>
 
