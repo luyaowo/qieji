@@ -6,7 +6,7 @@
 - 修复清单展开后，恢复位置时未移动外层窗口的问题。
 - 增加屏幕通知、位置与尺寸恢复、模拟唤醒及开合中恢复的回归检查，保留原有收展动效。
 
-本次同步源码，安装包下载仍为构建 27。[验证记录](docs/verification-0.2.6.md)。
+DMG 安装包见 [GitHub Releases](https://github.com/luyaowo/qieji/releases/tag/v0.2.6)，仍为 ad-hoc 签名的测试版。[验证记录](docs/verification-0.2.6.md)。
 
 ## 0.2.5（构建 27） · 2026-10-27
 
