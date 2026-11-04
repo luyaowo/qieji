@@ -1981,3 +1981,33 @@ html[data-platform="windows"] .task-paper { max-width:840px; margin:0 auto; }
 .startup-error h1 { font-size:24px; }
 .startup-error button { margin:16px 12px 0 0; padding:8px 18px; border:1px solid #a7afa0; border-radius:8px; background:#faf9f5; color:#1b365d; cursor:pointer; }
 
+/* Stage 2: the native window bounds follow the visible paper, with no invisible
+   shadow margin or page reload while switching modes. */
+html[data-platform="windows"] .app-screen { width:100%; height:100%; min-height:0; background:var(--paper); }
+html[data-platform="windows"] .app-screen[data-mode="side"] .side-panel {
+  inset:0; width:100%; min-width:0; height:100%; min-height:0; max-height:none;
+  border:0; border-radius:0; background:var(--paper); box-shadow:none;
+  transform:none; transition:none;
+}
+html[data-platform="windows"] .app-screen[data-mode="side"][data-open="false"] .side-panel {
+  opacity:0; visibility:hidden; pointer-events:none;
+}
+html[data-platform="windows"] .app-screen[data-mode="side"][data-open="true"] .side-panel {
+  opacity:1; visibility:visible; pointer-events:auto; transform:none;
+}
+html[data-platform="windows"] .edge-tab {
+  inset:0; width:100%; height:100%; min-height:0; padding:16px 0;
+  background:var(--paper); border:1px solid var(--line); border-right:0;
+  border-radius:0; box-shadow:none; transform:none; transition:none;
+}
+html[data-platform="windows"] .app-screen[data-open="true"] .edge-tab {
+  opacity:0; pointer-events:none; transform:none;
+}
+html[data-platform="windows"] .panel-toolbar { flex-wrap:wrap; gap:8px; }
+html[data-platform="windows"] .desktop-file-actions { min-width:180px; gap:12px; }
+html[data-platform="windows"] .toolbar-actions { margin-left:auto; gap:8px; }
+@media (max-width:600px) {
+  html[data-platform="windows"] .desktop-file-actions { flex-basis:100%; order:3; }
+  html[data-platform="windows"] .panel-toolbar { padding:10px 16px; }
+}
+

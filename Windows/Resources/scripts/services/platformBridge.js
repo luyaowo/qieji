@@ -8,6 +8,36 @@
   let closing = false;
   let mounted = false;
   let recovered = false;
+  let composing = false;
+  let desktop = { view: "paper", mode: "paper", open: true, trayReady: false };
+
+  function applyDesktopState(next) {
+    if (!next || !["paper", "side", "edge", "hidden"].includes(next.view)) return;
+    desktop = { ...next };
+    window.__QIEJI_DISPLAY_MODE__ = next.mode;
+    window.__QIEJI_PANEL_OPEN__ = next.open;
+    if (doc) doc.documentElement.dataset.desktopView = next.view;
+    window.paperEdgeSetDesktopState?.(next);
+    if (next.warning) notice(next.warning);
+  }
+  async function revealForNotice() {
+    if (composing) return false;
+    try { applyDesktopState(await invoke("qieji_reveal")); } catch { /* Keep the current window and error message. */ }
+  }
+  async function requestDesktop(view) {
+    if (!["paper", "side", "edge", "hidden"].includes(view)) return false;
+    if (!mounted) { if (view === "paper") await revealForNotice(); return false; }
+    if (composing) { notice("请先完成当前中文输入，再切换窗口。"); return false; }
+    return withOperation(async () => {
+      await saveCurrent();
+      const next = await invoke("qieji_window", { view, workspace: currentWorkspace() });
+      applyDesktopState(next);
+      return true;
+    });
+  }
+  function requestWindowClose() {
+    return desktop.trayReady ? requestDesktop("hidden") : requestClose();
+  }
 
   function invoke(command, args = {}) {
     if (typeof window.__TAURI__?.core?.invoke !== "function") {
@@ -82,6 +112,7 @@
   }
   async function requestClose() {
     if (closing || busy) return false;
+    if (composing) { notice("请先完成当前中文输入，再退出且记。"); return false; }
     if (!mounted) { await invoke("qieji_exit", { workspace: null }); return true; }
     closing = true;
     const root = doc?.getElementById("root");
@@ -100,6 +131,15 @@
   }
   function postMessage(message) {
     if (message.type === "workspace") { enqueueSave(message.workspace).catch(() => {}); return; }
+    if (message.type === "displayMode") {
+      requestDesktop(message.mode === "paper" ? "paper" : message.open ? "side" : "edge");
+      return;
+    }
+    if (message.type === "tabDrag") {
+      const phase = message.phase === "start" ? "begin" : message.phase;
+      invoke("qieji_drag", { phase, screenY: message.screenY }).catch(error => notice(messageOf(error)));
+      return;
+    }
     if (message.type === "ready") {
       invoke("qieji_ready").catch(error => notice(messageOf(error)));
       if (recovered) notice("已从上一版工作区恢复，任务和回收记录已保留。");
@@ -108,8 +148,7 @@
   async function bootstrap() {
     const loaded = await invoke("qieji_bootstrap");
     window.__QIEJI_NATIVE_WORKSPACE__ = loaded.workspace;
-    window.__QIEJI_DISPLAY_MODE__ = "paper";
-    window.__QIEJI_PANEL_OPEN__ = true;
+    applyDesktopState(loaded.desktop || { view: "paper", mode: "paper", open: true, trayReady: false });
     recovered = loaded.recovered;
     if (doc) doc.documentElement.dataset.platform = "windows";
     return loaded;
@@ -121,6 +160,7 @@
     root.querySelector(".startup-message").textContent = messageOf(error);
     root.querySelector(".retry-start").onclick = () => start(mount);
     root.querySelector(".exit-start").onclick = () => requestClose();
+    revealForNotice();
   }
   async function start(mount) {
     try {
@@ -132,20 +172,27 @@
     } catch (error) { showStartupError(error, mount); }
   }
   if (typeof window.addEventListener === "function") {
+    window.addEventListener("compositionstart", () => { composing = true; });
+    window.addEventListener("compositionend", () => { composing = false; });
     window.addEventListener("keydown", event => {
       if (!(event.ctrlKey || event.metaKey) || event.altKey || event.isComposing) return;
       const key = event.key.toLowerCase();
       if (key === "p") { event.preventDefault(); return; }
-      if (key === "k") { event.preventDefault(); doc?.querySelector(".task-input")?.focus(); }
+      if (key === "k") {
+        event.preventDefault();
+        requestDesktop(desktop.mode === "side" ? "side" : "paper").then(() => doc?.querySelector(".task-input")?.focus());
+      }
       if (key === "s") { event.preventDefault(); saveCurrent().catch(() => {}); }
     });
   }
   QieJi.platform = {
     isNative: true,
     isTauri: true,
-    features: { windowModes: false, print: false, reminders: false },
+    features: { windowModes: true, print: false, reminders: false },
     bootstrap, start, postMessage, saveCurrent, exportWorkspace, importWorkspace, requestClose,
     flush: () => tail,
     getSaveState: () => ({ ...saveState }),
+    requestDesktop, requestWindowClose, applyDesktopState, revealForNotice,
+    getDesktopState: () => ({ ...desktop }),
   };
 })();

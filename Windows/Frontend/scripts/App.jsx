@@ -56,7 +56,8 @@
       if (window.__QIEJI_DISPLAY_MODE__) return window.__QIEJI_DISPLAY_MODE__;
       try { return localStorage.getItem("qieji-display-mode-v1") === "paper" ? "paper" : "side"; } catch { return "side"; }
     });
-    const [isOpen, setIsOpen] = useState(() => window.__QIEJI_DISPLAY_MODE__ === "paper" || readPanelOpen());
+    const [isOpen, setIsOpen] = useState(() => typeof window.__QIEJI_PANEL_OPEN__ === "boolean"
+      ? window.__QIEJI_PANEL_OPEN__ : window.__QIEJI_DISPLAY_MODE__ === "paper" || readPanelOpen());
     const [newTask, setNewTask] = useState(() => readDraft().text);
     const [newGroup, setNewGroup] = useState(() => readDraft().group);
     const [recoveryOpen, setRecoveryOpen] = useState(false);
@@ -95,10 +96,9 @@
 
     const requestDisplayMode = (mode, open = true) => {
       setRecoveryOpen(false);
-      setDisplayMode(mode);
-      setIsOpen(open);
-      if (IS_NATIVE) QieJi.platform.postMessage({ type: "displayMode", mode, open });
+      return QieJi.platform.requestDesktop(mode === "paper" ? "paper" : open ? "side" : "edge");
     };
+    const requestPanelOpen = open => requestDisplayMode("side", open);
   
     useEffect(() => {
       persistPanelOpen(isOpen, IS_NATIVE);
@@ -106,6 +106,9 @@
   
     useEffect(() => {
       window.paperEdgeSetOpen = (open) => setIsOpen(Boolean(open));
+      window.paperEdgeSetDesktopState = next => {
+        ReactDOM.flushSync(() => { setDisplayMode(next.mode); setIsOpen(next.open); });
+      };
       window.paperEdgeSetMode = (mode) => {
         if (mode === "paper" || mode === "side") setDisplayMode(mode);
       };
@@ -125,7 +128,7 @@
         return true;
       };
       window.paperEdgeShowNotice = (message) => {
-        setIsOpen(true);
+        QieJi.platform.revealForNotice();
         setNotificationNotice({ status: "info", message });
       };
       window.paperEdgeOpenTask = (id) => {
@@ -161,6 +164,7 @@
       if (IS_NATIVE) QieJi.platform.postMessage({ type: "ready" });
       return () => {
         delete window.paperEdgeSetOpen; delete window.paperEdgeSetMode;
+        delete window.paperEdgeSetDesktopState;
         delete window.paperEdgePrepareToQuit; delete window.paperEdgeOpenTask;
         delete window.paperEdgeCompleteTask; delete window.paperEdgeSnoozeTask;
         delete window.paperEdgeExportWorkspace; delete window.paperEdgePreviewImport;
@@ -300,16 +304,16 @@
   
     useEffect(() => {
       const onKeyDown = (event) => {
-        if (event.defaultPrevented || event.target.closest?.('[contenteditable="true"]') || event.target.closest?.(".task-editor-wrap")) return;
+        if (event.isComposing || event.defaultPrevented || event.target.closest?.('[contenteditable="true"]') || event.target.closest?.(".task-editor-wrap")) return;
         if (event.key === "Escape") {
           if (pendingPurge) setPendingPurge(null);
           else if (recoveryOpen) setRecoveryOpen(false);
-          else if (displayMode === "side") setIsOpen(false);
+          else if (displayMode === "side") requestPanelOpen(false);
         }
         if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
           event.preventDefault();
           setRecoveryOpen(false);
-          setIsOpen(true);
+          requestPanelOpen(true);
           window.setTimeout(() => addInputRef.current?.focus(), 180);
         }
       };
@@ -373,6 +377,7 @@
 
     const beginTabDrag = (event) => {
       if (!IS_NATIVE || isOpen || event.button !== 0) return;
+      suppressTabClickRef.current = false;
       tabDragRef.current = {
         pointerId: event.pointerId,
         startScreenY: event.screenY,
@@ -411,9 +416,8 @@
         drag.element.releasePointerCapture(drag.pointerId);
       }
       sendTabDrag(!cancelled && drag.moved ? "end" : "cancel", event.screenY);
-      if (drag.moved) {
+      if (cancelled || drag.moved) {
         suppressTabClickRef.current = true;
-        window.setTimeout(() => { suppressTabClickRef.current = false; }, 0);
       }
     };
 
@@ -585,8 +589,11 @@
             onPointerUp={finishTabDrag} onPointerCancel={(event) => finishTabDrag(event, true)}
             onLostPointerCapture={(event) => finishTabDrag(event, true)}
             onClick={(event) => {
-              if (suppressTabClickRef.current) { event.preventDefault(); return; }
-              setIsOpen((value) => !value);
+              if (suppressTabClickRef.current && event.detail !== 0) {
+                suppressTabClickRef.current = false;
+                event.preventDefault(); return;
+              }
+              requestPanelOpen(!panelOpenRef.current);
             }}>
             <span className="edge-tab-label">且记</span><span className="edge-tab-count"><span className="count-glyph">{openTasks.length}</span></span>
           </button>
@@ -609,6 +616,8 @@
                 {saveState.status === "error" && <button type="button" className="toolbar-text" onClick={() => QieJi.platform.saveCurrent().catch(() => {})}>重试保存</button>}
               </div>
               <div className="toolbar-actions">
+                <button type="button" className="toolbar-text desktop-quit" title="保存并退出且记"
+                  onClick={() => QieJi.platform.requestClose()}>退出</button>
                 {IS_NATIVE ? <>
                   <button type="button" className="icon-button toolbar-clean" aria-label="清理已完成"
                     title={`清理已完成：${doneTasks.length} 条，可从回收站恢复`} disabled={!doneTasks.length} onClick={cleanCompleted}>
@@ -627,7 +636,7 @@
                   </button>
                 </>}
                 {FEATURES.windowModes && <button type="button" className="icon-button" aria-label="收起到侧边" title="收起到侧边"
-                  onClick={() => displayMode === "paper" ? requestDisplayMode("side", false) : setIsOpen(false)}>
+                  onClick={() => requestPanelOpen(false)}>
                   <svg className="control-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6M20 5v14"></path></svg>
                 </button>}
               </div>

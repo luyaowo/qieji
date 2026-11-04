@@ -1,6 +1,8 @@
+mod desktop;
+mod geometry;
 pub mod store;
 
-#[cfg(debug_assertions)]
+use desktop::{Desktop, Snapshot, View};
 use serde_json::json;
 use serde_json::Value;
 #[cfg(debug_assertions)]
@@ -12,12 +14,13 @@ use std::{
         Mutex,
     },
 };
-use store::{LoadedWorkspace, Store};
+use store::Store;
 use tauri::{Manager, State, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 
 struct DesktopState {
     store: Mutex<Store>,
+    desktop: Mutex<Desktop>,
     initialized: AtomicBool,
     exiting: AtomicBool,
     ready: AtomicBool,
@@ -46,10 +49,55 @@ fn save(state: &DesktopState, workspace: Value) -> Result<Value, String> {
 }
 
 #[tauri::command]
-async fn qieji_bootstrap(state: State<'_, DesktopState>) -> Result<LoadedWorkspace, String> {
+async fn qieji_bootstrap(state: State<'_, DesktopState>) -> Result<Value, String> {
     let loaded = access(&state)?.load()?;
     state.initialized.store(true, Ordering::SeqCst);
-    Ok(loaded)
+    let mut desktop = state.desktop.lock().map_err(|_| "窗口状态暂时不可用。")?;
+    if loaded.recovered {
+        desktop.view = View::Paper;
+    }
+    Ok(
+        json!({"workspace": loaded.workspace, "recovered": loaded.recovered, "desktop": desktop.snapshot()}),
+    )
+}
+
+#[tauri::command]
+async fn qieji_window(
+    view: View,
+    workspace: Value,
+    window: WebviewWindow,
+    state: State<'_, DesktopState>,
+) -> Result<Snapshot, String> {
+    save(&state, workspace)?;
+    state
+        .desktop
+        .lock()
+        .map_err(|_| "窗口状态暂时不可用。")?
+        .apply(&window, view, true)
+}
+
+#[tauri::command]
+fn qieji_reveal(window: WebviewWindow, state: State<'_, DesktopState>) -> Result<Snapshot, String> {
+    // Revealing an error must remain possible even when workspace writes fail.
+    state
+        .desktop
+        .lock()
+        .map_err(|_| "窗口状态暂时不可用。")?
+        .apply(&window, View::Paper, true)
+}
+
+#[tauri::command]
+fn qieji_drag(
+    phase: String,
+    screen_y: f64,
+    window: WebviewWindow,
+    state: State<'_, DesktopState>,
+) -> Result<(), String> {
+    state
+        .desktop
+        .lock()
+        .map_err(|_| "窗口状态暂时不可用。")?
+        .drag(&window, &phase, screen_y)
 }
 
 #[tauri::command]
@@ -186,6 +234,13 @@ fn qieji_ready(window: WebviewWindow, state: State<'_, DesktopState>) -> Result<
     if state.ready.swap(true, Ordering::SeqCst) {
         return Ok(());
     }
+    {
+        let mut desktop = state.desktop.lock().map_err(|_| "窗口状态暂时不可用。")?;
+        let view = desktop.view;
+        if desktop.apply(&window, view, view != View::Edge).is_err() {
+            desktop.apply(&window, View::Paper, true)?;
+        }
+    }
     #[cfg(debug_assertions)]
     if state.smoke_root.is_some() {
         window
@@ -214,7 +269,18 @@ fn qieji_smoke(
             let backups = fs::read_dir(root.join("Data/Backups"))
                 .map(|v| v.count())
                 .unwrap_or(0);
-            Ok(json!({"workspace":current,"exported":exported,"backups":backups}))
+            let window = app.get_webview_window("main").ok_or("窗口不可用。")?;
+            let desktop = state
+                .desktop
+                .lock()
+                .map_err(|_| "窗口状态不可用。")?
+                .snapshot();
+            Ok(
+                json!({"workspace":current,"exported":exported,"backups":backups,"desktop":desktop,
+                "visible":window.is_visible().unwrap_or(false), "size":window.inner_size().ok(),
+                "scale":window.scale_factor().unwrap_or(1.0), "position":window.outer_position().ok(),
+                "resizable":window.is_resizable().unwrap_or(false), "maximizable":window.is_maximizable().unwrap_or(false)}),
+            )
         }
         "failWrites" => {
             state
@@ -242,9 +308,13 @@ fn qieji_smoke(
     }
 }
 
-fn request_close(app: &tauri::AppHandle) {
+fn request_close(app: &tauri::AppHandle, quit: bool) {
     if let Some(web) = app.get_webview_window("main") {
-        let _ = web.eval("window.QieJi?.platform?.requestClose()");
+        let _ = web.eval(if quit {
+            "window.QieJi?.platform?.requestClose()"
+        } else {
+            "window.QieJi?.platform?.requestWindowClose()"
+        });
     }
 }
 
@@ -258,10 +328,7 @@ pub fn run() {
     // It must not attach to or terminate an already-open development preview.
     if !smoke {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, _, _| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
+            desktop::request(app, View::Paper);
         }));
     }
     #[cfg(debug_assertions)]
@@ -274,6 +341,9 @@ pub fn run() {
         qieji_export,
         qieji_exit,
         qieji_ready,
+        qieji_window,
+        qieji_reveal,
+        qieji_drag,
         qieji_smoke
     ]);
     #[cfg(not(debug_assertions))]
@@ -285,7 +355,10 @@ pub fn run() {
         qieji_import,
         qieji_export,
         qieji_exit,
-        qieji_ready
+        qieji_ready,
+        qieji_window,
+        qieji_reveal,
+        qieji_drag
     ]);
     let app = builder.setup(move |app| {
         #[cfg(debug_assertions)]
@@ -304,6 +377,7 @@ pub fn run() {
         let data = smoke_root.as_ref().map(|r| r.join("Data")).unwrap_or(data);
         let web_data = data.join("WebView");
         app.manage(DesktopState {
+            desktop: Mutex::new(Desktop::new(data.clone())),
             store: Mutex::new(Store::new(data)), initialized: AtomicBool::new(false),
             exiting: AtomicBool::new(false), ready: AtomicBool::new(false),
             #[cfg(debug_assertions)] smoke_root,
@@ -315,12 +389,40 @@ pub fn run() {
         #[cfg(debug_assertions)]
         let window = window.incognito(app.state::<DesktopState>().smoke_root.is_some());
         window.build()?;
+        if !smoke {
+            match desktop::init_tray(app.handle()) {
+                Ok(()) => { app.state::<DesktopState>().desktop.lock().map_err(|_| "托盘状态不可用。")?.tray_ready = true; },
+                Err(error) => eprintln!("托盘创建失败，将保留完整窗口与保存后退出入口：{error}"),
+            }
+            let handle = app.handle().clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_secs(2));
+                if handle.state::<DesktopState>().exiting.load(Ordering::SeqCst) { break; }
+                let scheduled = handle.clone();
+                let _ = handle.run_on_main_thread(move || {
+                    if let Some(window) = scheduled.get_webview_window("main") {
+                        let state = scheduled.state::<DesktopState>();
+                        if state.ready.load(Ordering::SeqCst) {
+                            if let Ok(mut desktop) = state.desktop.try_lock() { desktop.refresh(&window); }
+                        }
+                    }
+                });
+            });
+        }
         Ok(())
     }).on_window_event(|window, event| {
         if let tauri::WindowEvent::CloseRequested { api, .. } = event {
             let state = window.state::<DesktopState>();
             if !state.exiting.load(Ordering::SeqCst) && state.initialized.load(Ordering::SeqCst) {
-                api.prevent_close(); request_close(window.app_handle());
+                api.prevent_close(); request_close(window.app_handle(), false);
+            }
+        }
+        if matches!(event, tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. }) {
+            let state = window.state::<DesktopState>();
+            if state.ready.load(Ordering::SeqCst) {
+                if let Some(web) = window.app_handle().get_webview_window("main") {
+                    if let Ok(mut desktop) = state.desktop.try_lock() { desktop.record_paper(&web); }
+                }
             }
         }
     }).build(tauri::generate_context!()).expect("无法启动且记 Windows 工程");
@@ -329,7 +431,7 @@ pub fn run() {
             let state = handle.state::<DesktopState>();
             if !state.exiting.load(Ordering::SeqCst) && state.initialized.load(Ordering::SeqCst) {
                 api.prevent_exit();
-                request_close(handle);
+                request_close(handle, true);
             }
         }
     });

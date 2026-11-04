@@ -58,7 +58,7 @@ jobs:
             ~/.cargo/git
             Windows/src-tauri/target
             !Windows/src-tauri/target/**/bundle/**
-          key: windows-x64-rust-1.97.1-${{ hashFiles('Windows/src-tauri/Cargo.lock') }}
+          key: windows-x64-rust-1.97.1-${{ hashFiles('Windows/src-tauri/Cargo.lock', 'Windows/src-tauri/Cargo.toml') }}
 
       - name: Install locked frontend dependencies
         run: npm ci --ignore-scripts

@@ -8,14 +8,15 @@ const workspace = text => ({ version: 2, tasks: [{id:'synthetic',text,group:'tod
 const plain = value => JSON.parse(JSON.stringify(value));
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function harness(handler) {
-  const calls = [], notices = [];
+  const calls = [], notices = [], listeners = new Map();
   const window = { __TAURI__: { core: { invoke(command, args) {
     calls.push({ command, args: plain(args || {}) });
     return Promise.resolve().then(() => handler(command, args || {}));
   } } }, paperEdgePrepareToQuit: () => workspace('current'), paperEdgeShowNotice: text => notices.push(text),
-  paperEdgeExportWorkspace: () => ({...workspace('export'),format:'qieji-workspace'}) };
+  paperEdgeExportWorkspace: () => ({...workspace('export'),format:'qieji-workspace'}),
+  addEventListener: (name, fn) => listeners.set(name, fn) };
   vm.runInNewContext(source, { window, Promise, JSON, Error });
-  return { window, api: window.QieJi.platform, calls, notices };
+  return { window, api: window.QieJi.platform, calls, notices, emit: name => listeners.get(name)?.() };
 }
 test('React mount waits for native bootstrap, including empty workspaces', async () => {
   let release; const wait = new Promise(r => { release = r; }); let mounted = false;
@@ -77,4 +78,64 @@ test('canceling the import file picker never creates a checkpoint', async () => 
   const h=harness((command,args)=>command==='qieji_save'?args.workspace:null);
   assert.equal(await h.api.importWorkspace(),false);
   assert.ok(!h.calls.some(c=>c.command==='qieji_import'));
+});
+
+const desktopState = (view, trayReady = true) => ({view, mode:view==='paper'?'paper':'side',open:view!=='edge',trayReady});
+test('native startup restores a collapsed edge before mounting React', async () => {
+  const h=harness(()=>({workspace:workspace('saved'),recovered:false,desktop:desktopState('edge')}));
+  await h.api.start(()=>{});
+  assert.equal(h.window.__QIEJI_PANEL_OPEN__,false);
+  assert.equal(h.window.__QIEJI_DISPLAY_MODE__,'side');
+});
+test('window transitions commit the current editor before changing native bounds', async () => {
+  const h=harness((command,args)=>command==='qieji_bootstrap'?{workspace:workspace('before'),desktop:desktopState('paper')}:
+    command==='qieji_window'?desktopState(args.view):args.workspace);
+  await h.api.start(()=>{});
+  h.window.paperEdgePrepareToQuit=()=>workspace('unblurred edit');
+  assert.equal(await h.api.requestDesktop('edge'),true);
+  const change=h.calls.find(c=>c.command==='qieji_window');
+  assert.equal(change.args.workspace.tasks[0].text,'unblurred edit');
+  assert.ok(h.calls.findIndex(c=>c.command==='qieji_save')<h.calls.indexOf(change));
+  assert.equal(h.api.getDesktopState().view,'edge');
+});
+test('failed writes block collapse and tray hide without losing the open window', async () => {
+  const h=harness(command=>{if(command==='qieji_bootstrap')return {workspace:workspace('saved'),desktop:desktopState('paper')};
+    if(command==='qieji_save')throw new Error('disk failure');});
+  await h.api.start(()=>{});
+  assert.equal(await h.api.requestDesktop('edge'),false);
+  assert.equal(await h.api.requestWindowClose(),false);
+  assert.equal(h.api.getDesktopState().view,'paper');
+  assert.ok(!h.calls.some(c=>c.command==='qieji_window'||c.command==='qieji_exit'));
+});
+test('native window failure rolls back the displayed mode', async () => {
+  const h=harness((command,args)=>{if(command==='qieji_bootstrap')return {workspace:workspace('saved'),desktop:desktopState('paper')};
+    if(command==='qieji_window')throw new Error('window unavailable');return args.workspace;});
+  await h.api.start(()=>{});
+  assert.equal(await h.api.requestDesktop('edge'),false);
+  assert.equal(h.api.getDesktopState().view,'paper');
+});
+test('close hides only when tray exists; explicit quit still exits', async () => {
+  const h=harness((command,args)=>command==='qieji_bootstrap'?{workspace:workspace('saved'),desktop:desktopState('paper')}:
+    command==='qieji_window'?desktopState(args.view):args.workspace);
+  await h.api.start(()=>{});
+  assert.equal(await h.api.requestWindowClose(),true);
+  assert.equal(h.calls.at(-1).command,'qieji_window');
+  assert.equal(h.calls.at(-1).args.view,'hidden');
+  assert.equal(await h.api.requestClose(),true);
+  assert.equal(h.calls.at(-1).command,'qieji_exit');
+});
+test('missing tray falls back to saving and exiting instead of disappearing', async () => {
+  const h=harness((command,args)=>command==='qieji_bootstrap'?{workspace:workspace('saved'),desktop:desktopState('paper',false)}:args.workspace);
+  await h.api.start(()=>{});
+  assert.equal(await h.api.requestWindowClose(),true);
+  assert.equal(h.calls.at(-1).command,'qieji_exit');
+});
+test('Chinese composition blocks transitions and exit until composition ends', async () => {
+  const h=harness((command,args)=>command==='qieji_bootstrap'?{workspace:workspace('saved'),desktop:desktopState('paper')}:
+    command==='qieji_window'?desktopState(args.view):args.workspace);
+  await h.api.start(()=>{});h.emit('compositionstart');
+  assert.equal(await h.api.requestDesktop('edge'),false);
+  assert.equal(await h.api.requestClose(),false);
+  assert.ok(!h.calls.some(c=>c.command==='qieji_window'||c.command==='qieji_exit'));
+  h.emit('compositionend');assert.equal(await h.api.requestDesktop('edge'),true);
 });

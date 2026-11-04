@@ -4,7 +4,7 @@
   const invoke = (action, payload = null) => window.__TAURI__.core.invoke("qieji_smoke", { action, payload });
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
   const frames = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-  const check = (name, valid) => { results.push({ name, valid: Boolean(valid) }); if (!valid) throw new Error(name); };
+  const check = (name, valid, observed) => { results.push({ name, valid: Boolean(valid), observed }); if (!valid) throw new Error(name); };
   const current = () => window.paperEdgePrepareToQuit();
   const add = async text => {
     const input = document.querySelector('.task-input');
@@ -16,7 +16,7 @@
   try {
     await frames(); await platform.flush(); await document.fonts.ready;
     check('fresh-window-shows-only-five-generic-samples', current().tasks.length === 5 && current().tasks.every(t=>t.id.startsWith('sample-')));
-    check('phase-one-has-no-unavailable-controls', !document.querySelector('.mode-switch,.toolbar-print,.row-action.reminder,[aria-label="收起到侧边"]'));
+    check('phase-two-exposes-window-modes-without-unavailable-features', Boolean(document.querySelector('.mode-switch')) && !document.querySelector('.toolbar-print,.row-action.reminder'));
     check('bundled-font-loaded', document.fonts.check('16px "QieJi Paper"'));
     const task = await add('原生保存合成任务'); check('add-task-in-real-react-view', Boolean(task));
     let row = document.querySelector(`[data-task-id="${task.id}"]`); row.querySelector('.task-copy').click(); await frames();
@@ -41,9 +41,45 @@
     check('import-merges-and-checkpoints-original', persisted.workspace.tasks.some(t=>t.id==='imported-native') && persisted.backups===1);
     await platform.importWorkspace(); persisted=await invoke('read');
     check('same-id-import-does-not-duplicate', persisted.workspace.tasks.filter(t=>t.id==='imported-native').length===1);
+    const marker = {}; window.__QIEJI_STAGE2_PAGE__ = marker;
+    const draft = document.querySelector('.task-input');
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(draft, '收展中保留的合成草稿');
+    draft.dispatchEvent(new Event('input', { bubbles: true })); await frames();
+    row = document.querySelector(`[data-task-id="${task.id}"]`); row.querySelector('.task-copy').click(); await frames();
+    const transitionEditor = document.querySelector('.task-edit');
+    transitionEditor.innerHTML = '<b>纸边切换前的合成编辑</b>';
+    transitionEditor.dispatchEvent(new Event('input', { bubbles: true }));
+    check('collapse-native-window-completes', await platform.requestDesktop('edge'));
+    await frames(); let desktopRead = await invoke('read');
+    check('collapsed-native-bounds-fit-only-the-visible-tab', desktopRead.desktop.view==='edge' &&
+      Math.abs(desktopRead.size.width/desktopRead.scale-54)<2 && Math.abs(desktopRead.size.height/desktopRead.scale-170)<2);
+    check('collapse-flushes-unblurred-edit-before-resizing', desktopRead.workspace.tasks.find(t=>t.id===task.id).text==='纸边切换前的合成编辑');
+    const nativeDrag = (phase, screenY) => window.__TAURI__.core.invoke('qieji_drag', {phase,screenY});
+    const originalY=desktopRead.position.y;
+    await nativeDrag('begin',100);await nativeDrag('move',140);
+    check('drag-uses-gesture-coordinates-and-monitor-scale', Math.abs((await invoke('read')).position.y-originalY-40*desktopRead.scale)<2);
+    await nativeDrag('cancel',140);
+    check('canceled-drag-restores-original-height', Math.abs((await invoke('read')).position.y-originalY)<2);
+    await nativeDrag('begin',100);await nativeDrag('move',130);await nativeDrag('end',130);
+    check('finished-drag-keeps-new-native-height', Math.abs((await invoke('read')).position.y-originalY-30*desktopRead.scale)<2);
+    check('expand-native-panel-completes', await platform.requestDesktop('side'));
+    await frames(); desktopRead = await invoke('read');
+    check('expanded-native-view-matches-react-mode', desktopRead.desktop.view==='side' && document.querySelector('.app-screen').dataset.mode==='side' && document.querySelector('.app-screen').dataset.open==='true');
+    check('mode-switch-keeps-the-same-webview-and-draft', window.__QIEJI_STAGE2_PAGE__===marker && document.querySelector('.task-input').value==='收展中保留的合成草稿');
+    check('return-to-native-full-window-completes', await platform.requestDesktop('paper'));
+    await frames();
+    check('full-window-mode-is-restored', (await invoke('read')).desktop.view==='paper' && document.querySelector('.app-screen').dataset.mode==='paper');
+    const restoredWindow = await invoke('read');
+    check('full-window-restores-resize-and-maximize-capabilities', restoredWindow.resizable && restoredWindow.maximizable,
+      {resizable:restoredWindow.resizable,maximizable:restoredWindow.maximizable});
+    check('missing-tray-refuses-to-hide-and-keeps-window-accessible', await platform.requestDesktop('hidden')===false && (await invoke('read')).visible);
+    window.dispatchEvent(new CompositionEvent('compositionstart', {data:'测',bubbles:true}));
+    check('active-composition-blocks-collapse', await platform.requestDesktop('edge')===false && (await invoke('read')).desktop.view==='paper');
+    window.dispatchEvent(new CompositionEvent('compositionend', {data:'测',bubbles:true}));
     await invoke('failWrites', true);
     const unsaved = await add('写入失败后仍保留的合成任务');
     check('failed-save-cancels-native-exit', await platform.requestClose()===false);
+    check('failed-save-also-cancels-collapse', await platform.requestDesktop('edge')===false && (await invoke('read')).desktop.view==='paper');
     check('failed-save-state-is-error', platform.getSaveState().status==='error');
     check('failed-save-retains-in-memory-content', current().tasks.some(t=>t.id===unsaved.id));
     await frames();

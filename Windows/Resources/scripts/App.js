@@ -75,7 +75,7 @@
         return "side";
       }
     });
-    const [isOpen, setIsOpen] = useState(() => window.__QIEJI_DISPLAY_MODE__ === "paper" || readPanelOpen());
+    const [isOpen, setIsOpen] = useState(() => typeof window.__QIEJI_PANEL_OPEN__ === "boolean" ? window.__QIEJI_PANEL_OPEN__ : window.__QIEJI_DISPLAY_MODE__ === "paper" || readPanelOpen());
     const [newTask, setNewTask] = useState(() => readDraft().text);
     const [newGroup, setNewGroup] = useState(() => readDraft().group);
     const [recoveryOpen, setRecoveryOpen] = useState(false);
@@ -118,19 +118,20 @@
     }, [displayMode]);
     const requestDisplayMode = (mode, open = true) => {
       setRecoveryOpen(false);
-      setDisplayMode(mode);
-      setIsOpen(open);
-      if (IS_NATIVE) QieJi.platform.postMessage({
-        type: "displayMode",
-        mode,
-        open
-      });
+      return QieJi.platform.requestDesktop(mode === "paper" ? "paper" : open ? "side" : "edge");
     };
+    const requestPanelOpen = open => requestDisplayMode("side", open);
     useEffect(() => {
       persistPanelOpen(isOpen, IS_NATIVE);
     }, [isOpen]);
     useEffect(() => {
       window.paperEdgeSetOpen = open => setIsOpen(Boolean(open));
+      window.paperEdgeSetDesktopState = next => {
+        ReactDOM.flushSync(() => {
+          setDisplayMode(next.mode);
+          setIsOpen(next.open);
+        });
+      };
       window.paperEdgeSetMode = mode => {
         if (mode === "paper" || mode === "side") setDisplayMode(mode);
       };
@@ -157,7 +158,7 @@
         return true;
       };
       window.paperEdgeShowNotice = message => {
-        setIsOpen(true);
+        QieJi.platform.revealForNotice();
         setNotificationNotice({
           status: "info",
           message
@@ -218,6 +219,7 @@
       return () => {
         delete window.paperEdgeSetOpen;
         delete window.paperEdgeSetMode;
+        delete window.paperEdgeSetDesktopState;
         delete window.paperEdgePrepareToQuit;
         delete window.paperEdgeOpenTask;
         delete window.paperEdgeCompleteTask;
@@ -354,14 +356,14 @@
     }, []);
     useEffect(() => {
       const onKeyDown = event => {
-        if (event.defaultPrevented || event.target.closest?.('[contenteditable="true"]') || event.target.closest?.(".task-editor-wrap")) return;
+        if (event.isComposing || event.defaultPrevented || event.target.closest?.('[contenteditable="true"]') || event.target.closest?.(".task-editor-wrap")) return;
         if (event.key === "Escape") {
-          if (pendingPurge) setPendingPurge(null);else if (recoveryOpen) setRecoveryOpen(false);else if (displayMode === "side") setIsOpen(false);
+          if (pendingPurge) setPendingPurge(null);else if (recoveryOpen) setRecoveryOpen(false);else if (displayMode === "side") requestPanelOpen(false);
         }
         if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
           event.preventDefault();
           setRecoveryOpen(false);
-          setIsOpen(true);
+          requestPanelOpen(true);
           window.setTimeout(() => addInputRef.current?.focus(), 180);
         }
       };
@@ -419,6 +421,7 @@
     };
     const beginTabDrag = event => {
       if (!IS_NATIVE || isOpen || event.button !== 0) return;
+      suppressTabClickRef.current = false;
       tabDragRef.current = {
         pointerId: event.pointerId,
         startScreenY: event.screenY,
@@ -455,11 +458,8 @@
         drag.element.releasePointerCapture(drag.pointerId);
       }
       sendTabDrag(!cancelled && drag.moved ? "end" : "cancel", event.screenY);
-      if (drag.moved) {
+      if (cancelled || drag.moved) {
         suppressTabClickRef.current = true;
-        window.setTimeout(() => {
-          suppressTabClickRef.current = false;
-        }, 0);
       }
     };
     useEffect(() => {
@@ -631,11 +631,12 @@
       onPointerCancel: event => finishTabDrag(event, true),
       onLostPointerCapture: event => finishTabDrag(event, true),
       onClick: event => {
-        if (suppressTabClickRef.current) {
+        if (suppressTabClickRef.current && event.detail !== 0) {
+          suppressTabClickRef.current = false;
           event.preventDefault();
           return;
         }
-        setIsOpen(value => !value);
+        requestPanelOpen(!panelOpenRef.current);
       }
     }, /*#__PURE__*/React.createElement("span", {
       className: "edge-tab-label"
@@ -703,7 +704,12 @@
       onClick: () => QieJi.platform.saveCurrent().catch(() => {})
     }, "\u91CD\u8BD5\u4FDD\u5B58")), /*#__PURE__*/React.createElement("div", {
       className: "toolbar-actions"
-    }, IS_NATIVE ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
+    }, /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      className: "toolbar-text desktop-quit",
+      title: "\u4FDD\u5B58\u5E76\u9000\u51FA\u4E14\u8BB0",
+      onClick: () => QieJi.platform.requestClose()
+    }, "\u9000\u51FA"), IS_NATIVE ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
       type: "button",
       className: "icon-button toolbar-clean",
       "aria-label": "\u6E05\u7406\u5DF2\u5B8C\u6210",
@@ -753,7 +759,7 @@
       className: "icon-button",
       "aria-label": "\u6536\u8D77\u5230\u4FA7\u8FB9",
       title: "\u6536\u8D77\u5230\u4FA7\u8FB9",
-      onClick: () => displayMode === "paper" ? requestDisplayMode("side", false) : setIsOpen(false)
+      onClick: () => requestPanelOpen(false)
     }, /*#__PURE__*/React.createElement("svg", {
       className: "control-icon",
       viewBox: "0 0 24 24",

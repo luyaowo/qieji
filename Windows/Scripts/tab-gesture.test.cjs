@@ -12,9 +12,9 @@ assert.ok(start >= 0 && end > start);
 const handlers = source.slice(start, end);
 
 function mount() {
-  const messages = [], listeners = new Map(), capture = new Set(), classes = new Set();
+  const messages = [], listeners = new Map(), capture = new Set(), classes = new Set(), timers = [];
   const context = { QieJi: { platform: { postMessage: value => messages.push(value) } }, window: {
-    setTimeout() {},
+    setTimeout(callback) { timers.push(callback); },
     addEventListener(type, callback) { listeners.set(type, callback); },
     removeEventListener(type) { listeners.delete(type); }
   } };
@@ -23,7 +23,7 @@ function mount() {
     const tabDragRef = {current: null}, suppressTabClickRef = {current: false};
     const useEffect = callback => callback();
     ${handlers}
-    return {beginTabDrag, moveTabDrag, finishTabDrag};
+    return {beginTabDrag, moveTabDrag, finishTabDrag, isSuppressed:()=>suppressTabClickRef.current};
   })()`, context);
   const element = {
     classList: { add: key => classes.add(key), remove: key => classes.delete(key) },
@@ -35,6 +35,7 @@ function mount() {
     screenY: y, buttons, button: 0, pointerId: id, currentTarget: element, preventDefault() {}
   });
   return { api, event, messages, capture, classes,
+    settleTimers() { while(timers.length)timers.shift()(); },
     emit(type) { listeners.get(type)?.(); },
     phases: () => messages.map(message => message.phase)
   };
@@ -69,4 +70,20 @@ test('标签拖动中失焦会取消并释放捕获', () => {
   const h = mount(); h.api.beginTabDrag(h.event(100)); h.api.moveTabDrag(h.event(110)); h.emit('blur');
   assert.deepEqual(h.phases(), ['start', 'move', 'cancel']);
   assert.equal(h.capture.size, 0); assert.equal(h.classes.size, 0);
+});
+
+test('松开状态的移动取消后，不把后到的点击当作展开', () => {
+  const h=mount();h.api.beginTabDrag(h.event(100));h.api.moveTabDrag(h.event(140,0));
+  h.settleTimers();assert.equal(h.api.isSuppressed(),true);
+});
+
+test('拖动结束后的点击抑制持续到下一次手势，不依赖零延时计时器', () => {
+  const h=mount();h.api.beginTabDrag(h.event(100));h.api.moveTabDrag(h.event(140));h.api.finishTabDrag(h.event(140,0));
+  h.settleTimers();assert.equal(h.api.isSuppressed(),true);
+  h.api.beginTabDrag(h.event(140));assert.equal(h.api.isSuppressed(),false);
+});
+
+test('没有移动的普通点击不被拖动抑制', () => {
+  const h=mount();h.api.beginTabDrag(h.event(100));h.api.finishTabDrag(h.event(100,0));
+  assert.equal(h.api.isSuppressed(),false);
 });
