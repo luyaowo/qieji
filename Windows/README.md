@@ -62,7 +62,15 @@ npm run check -- --native-smoke
 npm run build
 ```
 
-候选安装包输出到 `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/`。本工程没有自动推送、发布或安装脚本。安装包只打包静态资源和程序，不打包用户数据。
+候选安装包输出到 `src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/`。安装包只打包静态资源和程序，不打包用户数据。
+
+## 云端构建
+
+仓库的 [Windows build (no release)](../.github/workflows/windows-build.yml) 工作流在 Windows x64 环境运行前端、原生存储检查及 NSIS 打包。修改本工程并推送到 `main` 时触发，也可在 GitHub Actions 中手动运行。仅修改 Mac 工程不会触发这项构建。
+
+流程只读取仓库，不创建标签或 Release，不自动安装，也不上传可下载的安装包。候选包只保存在临时构建环境，构建摘要记录文件名和 SHA-256；运行结束后不保留候选包。依赖与 Rust 构建缓存用于减少后续构建耗时，不包含安装包目录。
+
+云端检查与打包成功不代表已完成 Windows 桌面交互或安装验收。
 
 版本号 `0.1.0` 是独立开发工程版本，未作为公开发行版发布。
 

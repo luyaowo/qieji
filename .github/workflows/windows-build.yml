@@ -1,0 +1,84 @@
+name: Windows build (no release)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'Windows/**'
+      - '.github/workflows/windows-build.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-x64:
+    runs-on: windows-2025
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: Windows
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: '0'
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: Windows/package-lock.json
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec
+        with:
+          toolchain: '1.97.1'
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Rust dependencies and build output
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            Windows/src-tauri/target
+            !Windows/src-tauri/target/**/bundle/**
+          key: windows-x64-rust-1.97.1-${{ hashFiles('Windows/src-tauri/Cargo.lock') }}
+
+      - name: Install locked frontend dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Check frontend and native storage
+        run: npm run check
+
+      - name: Build Windows x64 NSIS candidate
+        run: npm run build -- --ci -- --locked
+
+      - name: Record build result without uploading installers
+        run: |
+          $bundle = 'src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis'
+          $installers = @(Get-ChildItem -Path $bundle -Filter '*.exe' -File)
+          if ($installers.Count -eq 0) { throw 'No NSIS installer was produced.' }
+          '## Windows x64 build' >> $env:GITHUB_STEP_SUMMARY
+          'Frontend and native storage checks passed; NSIS packaging completed.' >> $env:GITHUB_STEP_SUMMARY
+          'Windows desktop interaction and installation acceptance are still pending.' >> $env:GITHUB_STEP_SUMMARY
+          'Installers remain temporary runner files. No release or downloadable installer is uploaded.' >> $env:GITHUB_STEP_SUMMARY
+          foreach ($installer in $installers) {
+            $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "- $($installer.Name): SHA-256 $hash" >> $env:GITHUB_STEP_SUMMARY
+          }
