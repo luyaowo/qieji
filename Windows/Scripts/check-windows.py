@@ -14,15 +14,15 @@ parser.add_argument("--native-smoke", action="store_true", help="Open the debug 
 args = parser.parse_args()
 output = Path(tempfile.mkdtemp(prefix="qieji-windows-check-"))
 env = os.environ.copy()
-env["TAURI_CONFIG"] = (root / "src-tauri/tauri.dev.conf.json").read_text()
+env["TAURI_CONFIG"] = (root / "src-tauri/tauri.dev.conf.json").read_text(encoding="utf-8")
 
 def run(name, command, timeout=600):
     log = output / (name + ".log")
     print("Checking " + name + "…", flush=True)
-    with log.open("w") as stream:
+    with log.open("w", encoding="utf-8") as stream:
         result = subprocess.run(command, cwd=root, env=env, stdout=stream, stderr=subprocess.STDOUT, timeout=timeout)
     if result.returncode:
-        print("\n".join(log.read_text().splitlines()[-60:]), flush=True)
+        print("\n".join(log.read_text(encoding="utf-8", errors="replace").splitlines()[-60:]), flush=True)
         raise SystemExit("FAIL: " + name + "; log: " + str(log))
     print("PASS: " + name, flush=True)
     return log
@@ -36,10 +36,10 @@ if args.native_smoke:
     binary = root / "src-tauri/target/debug" / ("qieji-windows.exe" if platform.system() == "Windows" else "qieji-windows")
     log = run("native-smoke", [str(binary), "--verify-stage1"], timeout=120)
     marker = "Stage 1 verification: "
-    locations = [line.split(marker, 1)[1] for line in log.read_text().splitlines() if marker in line]
+    locations = [line.split(marker, 1)[1] for line in log.read_text(encoding="utf-8").splitlines() if marker in line]
     if not locations:
         raise SystemExit("FAIL: native app did not produce verification results")
-    report = json.loads((Path(locations[-1]) / "results.json").read_text())
+    report = json.loads((Path(locations[-1]) / "results.json").read_text(encoding="utf-8"))
     if not report.get("valid") or not report.get("results") or not all(case.get("valid") for case in report["results"]):
         print(json.dumps(report, ensure_ascii=False, indent=2))
         raise SystemExit("FAIL: native bridge verification")
