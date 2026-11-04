@@ -1,6 +1,8 @@
-# 且记 · 架构与开发说明
+# 且记 macOS · 架构与开发说明
 
 [返回 README](../README.md)
+
+本说明对应仓库中的 `macOS/` 工程。Windows 的独立开发方式见 [Windows 工程说明](../Windows/README.md)。
 
 ## 架构
 
@@ -30,9 +32,10 @@ Swift / AppKit 原生应用
 
 需要 Apple 芯片 Mac、macOS 14 及以上、支持 Swift 6 的命令行工具、Node.js 18 及以上和 Python 3.9 及以上。前端构建所用 Babel 已随项目保存，无需安装 npm 依赖。
 
-在项目根目录生成前端并编译：
+在仓库根目录先进入 `macOS/`，再生成前端并编译。后续命令均在该工程目录执行：
 
 ```bash
+cd macOS
 node Scripts/build-frontend.cjs
 swift build -c release --arch arm64
 ```
@@ -74,8 +77,8 @@ python3 Scripts/check.py
 | `Sources/PaperEdgeApp/` | Swift 原生窗口、存储、通知、打印及运行资源 |
 | `Scripts/`、`Tests/` | 生成、检查、打包脚本与原生检查 |
 | `Packaging/` | 版本信息、图标和随包说明 |
-| `docs/` | README 使用的截图与演示资源 |
+| 仓库根目录的 `docs/` | README 使用的截图、演示资源和历史验证记录 |
 
 ## 安装与验证边界
 
-打包生成本地 ad-hoc 签名的测试包，尚未完成 Developer ID 签名和 Apple 公证。构建、检查和包内启动校验通过，不代表已经验证下载后的首次安装或所有系统环境。当前提醒限制及其他边界见[使用说明](../Packaging/使用说明.md#边界)。
+打包生成本地 ad-hoc 签名的测试包，尚未完成 Developer ID 签名和 Apple 公证。构建、检查和包内启动校验通过，不代表已经验证下载后的首次安装或所有系统环境。当前提醒限制及其他边界见[使用说明](../macOS/Packaging/使用说明.md#边界)。

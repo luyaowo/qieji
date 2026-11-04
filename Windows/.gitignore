@@ -1,0 +1,17 @@
+.DS_Store
+node_modules/
+src-tauri/target/
+dist/
+Backups/
+__pycache__/
+*.pyc
+*.app/
+*.log
+.env
+.env.*
+*.p12
+*.pfx
+*.key
+
+src-tauri/gen/schemas/
+Verification/

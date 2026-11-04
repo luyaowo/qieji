@@ -28,8 +28,8 @@ missing = [command for command in required if shutil.which(command) is None]
 if missing:
     raise SystemExit("缺少打包工具：" + ", ".join(missing) + "；请按 README 准备构建环境。")
 repository = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=root, text=True, capture_output=True)
-if repository.returncode or Path(repository.stdout.strip()).resolve() != root:
-    raise SystemExit("打包需要项目自身的 Git 仓库。请通过 Git 克隆仓库后运行；源码 ZIP 不含 Git 历史。")
+if repository.returncode or Path(repository.stdout.strip()).resolve() != root.parent or root.name != "macOS":
+    raise SystemExit("打包需要且记 Git 仓库中的 macOS 工程。请通过 Git 克隆仓库后运行；源码 ZIP 不含 Git 历史。")
 node_version = subprocess.check_output(["node", "--version"], text=True).strip()
 swift_version = subprocess.check_output(["swift", "--version"], text=True)
 swift_major = re.search(r"Swift version (\d+)", swift_version)

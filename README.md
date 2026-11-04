@@ -18,6 +18,8 @@
 
 且记，是一张安放在 Mac 桌边的任务纸。
 
+当前提供 macOS 版；Windows 版处于开发阶段。两个平台的源码分别位于 [macOS](macOS/README.md) 和 [Windows](Windows/README.md)，各自维护构建与系统能力。
+
 记下今日要做的事，近日惦念的事，还有那些留待日后慢慢实现的计划。不必细分层级，也无需排满日程，只需随手写下，让每一件事都有处安放。
 
 它静静待在桌边，让惦记的事留在视线里。需要时轻轻提醒，完成后从容划去。偶尔，还可以将清单印在纸上，带着未完成的小事，走进屏幕之外的生活。
@@ -59,6 +61,8 @@ brew install --cask luyaowo/qieji/qieji
 
 Homebrew 配置随仓库提供，安装包来自同一 GitHub Release。
 
+Windows 版的本机预览与开发方式见 [Windows 工程说明](Windows/README.md)。
+
 ## 快速上手
 
 1. 点击屏幕右侧的纸边展开清单，选择分组，写下任务并添加。
@@ -72,23 +76,31 @@ Homebrew 配置随仓库提供，安装包来自同一 GitHub Release。
 - **重复提醒针对同一条任务**：完成后停止，不会自动生成下一周期的新任务。
 - **删除可以恢复**：删除和“清理已完成”先移入回收站，永久删除需要单独确认。
 
-任务保存在本机，运行时无需联网或账号，没有云端同步。快捷键、备份、升级和提醒限制见[使用说明](Packaging/使用说明.md)，也可以在应用内打开“帮助 → 使用说明”。
+任务保存在本机，运行时无需联网或账号，没有云端同步。快捷键、备份、升级和提醒限制见[macOS 使用说明](macOS/Packaging/使用说明.md)，也可以在应用内打开“帮助 → 使用说明”。
 
 ## 开发
 
-且记使用 Swift + AppKit 承载原生窗口，在 WKWebView 中运行本地 React 界面。
+macOS 使用 Swift + AppKit 承载原生窗口，在 WKWebView 中运行本地 React 界面；Windows 使用 Tauri 2 + Rust 承载独立的 React 界面。
 
-构建需要 Apple 芯片 Mac、macOS 14 及以上、支持 Swift 6 的命令行工具、Node.js 18 及以上和 Python 3.9 及以上。通过 Git 克隆仓库后，在项目根目录执行：
+| 目录 | 内容 |
+| --- | --- |
+| `macOS/` | Mac 源码、前端资源、检查和打包脚本 |
+| `Windows/` | Windows 源码、前端资源、依赖锁文件和检查脚本 |
+| `Casks/` | macOS Homebrew 安装入口 |
+| `docs/` | 项目演示资源、Mac 开发说明与历史验证记录 |
+
+Mac 构建需要 Apple 芯片 Mac、macOS 14 及以上、支持 Swift 6 的命令行工具、Node.js 18 及以上和 Python 3.9 及以上。通过 Git 克隆仓库后，在仓库根目录执行：
 
 ```bash
+cd macOS
 node Scripts/build-frontend.cjs
 swift build -c release --arch arm64
 ```
 
-架构、生成 `.app`、ZIP 与 DMG、检查命令和目录说明见[架构与开发说明](docs/development.md)。开发副本与已安装应用共用任务目录，运行前请阅读其中的数据保护说明。
+生成 `.app`、ZIP 与 DMG、检查命令和目录说明见 [Mac 架构与开发说明](docs/development.md)。开发副本与已安装应用共用任务目录，运行前请阅读其中的数据保护说明。Windows 的环境要求、预览和构建命令见 [Windows 工程说明](Windows/README.md)。
 
 ## 许可
 
 主项目采用 [MIT 许可](LICENSE)，版权归 luyaowo。React、React DOM、Babel 与字体的许可见[第三方许可说明](THIRD_PARTY_NOTICES.md)。
 
-[版本记录](CHANGELOG.md) · [使用说明](Packaging/使用说明.md) · [架构与开发说明](docs/development.md)
+[Mac 版本记录](CHANGELOG.md) · [Mac 使用说明](macOS/Packaging/使用说明.md) · [Mac 架构与开发说明](docs/development.md) · [Windows 开发](Windows/README.md)
