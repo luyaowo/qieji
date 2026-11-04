@@ -104,6 +104,61 @@ fn displays(window: &WebviewWindow) -> Result<Vec<Display>, String> {
     Ok(result)
 }
 
+// Clip the native Windows hit area as well as the CSS surface. The right edge
+// remains square against the screen; normal windows retain their system frame.
+#[cfg(target_os = "windows")]
+fn update_corners(window: &WebviewWindow, view: View) -> Result<(), String> {
+    use windows_sys::Win32::Graphics::Gdi::{
+        CombineRgn, CreateRectRgn, CreateRoundRectRgn, DeleteObject, SetWindowRgn, RGN_OR,
+    };
+    let native = window.clone();
+    window
+        .run_on_main_thread(move || {
+            let apply = || -> Result<(), String> {
+                let hwnd = native.hwnd().map_err(|e| e.to_string())?.0;
+                // SAFETY: native is a live window on the UI thread. GDI regions
+                // are released locally unless SetWindowRgn takes ownership.
+                unsafe {
+                    if view == View::Paper {
+                        if SetWindowRgn(hwnd, std::ptr::null_mut(), 1) == 0 {
+                            return Err(std::io::Error::last_os_error().to_string());
+                        }
+                        return Ok(());
+                    }
+                    let size = native.inner_size().map_err(|e| e.to_string())?;
+                    let scale = native.scale_factor().map_err(|e| e.to_string())?;
+                    let width = size.width as i32;
+                    let height = size.height as i32;
+                    let radius =
+                        ((if view == View::Edge { 18.0 } else { 16.0 }) * scale).round() as i32;
+                    let rounded =
+                        CreateRoundRectRgn(0, 0, width + 1, height + 1, radius * 2, radius * 2);
+                    let square_right = CreateRectRgn(radius, 0, width, height);
+                    if rounded.is_null() || square_right.is_null() {
+                        if !rounded.is_null() {
+                            DeleteObject(rounded);
+                        }
+                        if !square_right.is_null() {
+                            DeleteObject(square_right);
+                        }
+                        return Err("无法创建窗口圆角区域。".into());
+                    }
+                    let combined = CombineRgn(rounded, rounded, square_right, RGN_OR);
+                    DeleteObject(square_right);
+                    if combined == 0 || SetWindowRgn(hwnd, rounded, 1) == 0 {
+                        DeleteObject(rounded);
+                        return Err("无法应用窗口圆角区域。".into());
+                    }
+                }
+                Ok(())
+            };
+            if let Err(error) = apply() {
+                eprintln!("窗口圆角设置失败：{error}");
+            }
+        })
+        .map_err(|e| e.to_string())
+}
+
 impl Desktop {
     pub fn new(directory: PathBuf) -> Self {
         let path = directory.join("window-preferences.json");
@@ -261,6 +316,8 @@ impl Desktop {
                 .set_position(PhysicalPosition::new(rect.x, rect.y))
                 .map_err(error)?;
         }
+        #[cfg(target_os = "windows")]
+        update_corners(window, view)?;
         self.prefs.monitor = Some(display.name);
         self.displays = all.to_vec();
         Ok(())
